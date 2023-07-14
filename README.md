@@ -10,9 +10,9 @@ docker build -t mlchallenge_image .
 
 docker run -d --name mlchallenge_container --network meli_network mlchallenge_image:latest
 
-docker run -d --name mlchallenge_container --network meli_network mlchallenge_image:latest
-
-
 
 ### obter informações sobre a rede
+
+#### Pode ser necessário colocar o endereço IP do conteiner MYSQL direto, para isso basta rodar o comando abaixo e pegar o endereço IP e trocar no arquivo main.py nas linhas 160 e 86
+
 docker network inspect meli_network

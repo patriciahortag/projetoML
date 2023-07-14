@@ -1,0 +1,23 @@
+version: '3'
+services:
+  mysql:
+    image: mysql:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ehcQ8jpfjrGST93n
+      MYSQL_DATABASE: mlchallenge_db
+    networks:
+      - meli_network
+
+  sua_aplicacao:
+    build: .
+    restart: always
+    ports:
+      - 8080:8080
+    depends_on:
+      - mysql
+    networks:
+      - meli_network
+
+networks:
+  sua_rede:

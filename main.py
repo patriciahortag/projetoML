@@ -1,12 +1,24 @@
-import json
 import mysql.connector
 import requests
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.backends import default_backend
 import os
+from datetime import datetime
+
+def load_public_key_from_file(file_path):
+    with open(file_path, "rb") as key_file:
+        public_key = serialization.load_pem_public_key(key_file.read(), backend=default_backend())
+    return public_key
+
+def load_private_key_from_file(file_path, password=None):
+    with open(file_path, "rb") as key_file:
+        private_key = serialization.load_pem_private_key(key_file.read(), password=password, backend=openssl.backend)
+    return private_key
 
 def verificaPardeChaves():
     if not (os.path.exists("chave_privada.pem") and os.path.exists("chave_publica.pem")):
+        print("Gerar um novo par de chaves")
         # Gerar um novo par de chaves
         chave_privada = rsa.generate_private_key(
             public_exponent=65537,
@@ -23,6 +35,7 @@ def verificaPardeChaves():
                     encryption_algorithm=serialization.NoEncryption()
                 )
             )
+            print("Chave privada gerada com sucesso")
         with open("chave_publica.pem", "wb") as chave_publica_arquivo:
             chave_publica_arquivo.write(
                 chave_publica.public_bytes(
@@ -30,20 +43,19 @@ def verificaPardeChaves():
                     format=serialization.PublicFormat.SubjectPublicKeyInfo
                 )
             )
+            print("Chave pública gerada com sucesso")
 
 
 def criptografar(texto):
-    # Verificar se o par de chaves já existe
-    verificaPardeChaves()
-
     chave_publica = load_public_key_from_file("chave_publica.pem")  # Substitua pelo caminho da chave pública
 
+    dado_bytes = texto.encode('utf-8')
     # Criptografar a mensagem usando a chave pública
     mensagem_criptografada = chave_publica.encrypt(
-        texto,
+        dado_bytes,
         padding.OAEP(
-            mgf=padding.MGF1(algorithm=chave_publica._backend._default_rsa_mgf1_hash_algorithm()),
-            algorithm=chave_publica._backend._default_rsa_oaep_hash_algorithm(),
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
             label=None
         )
     )
@@ -51,15 +63,14 @@ def criptografar(texto):
 
 
 def descriptografar(texto_criptografado):
-
     chave_privada = load_private_key_from_file("chave_privada.pem")  # Substitua pelo caminho da chave privada
 
     # Descriptografar a mensagem usando a chave privada
     mensagem_descriptografada = chave_privada.decrypt(
-        texto_criptografado,
+        ciphertext,
         padding.OAEP(
-            mgf=padding.MGF1(algorithm=chave_privada._backend._default_rsa_mgf1_hash_algorithm()),
-            algorithm=chave_privada._backend._default_rsa_oaep_hash_algorithm(),
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
             label=None
         )
     )
@@ -68,11 +79,14 @@ def descriptografar(texto_criptografado):
 
 
 def verificarDB():
+    print("Verificando se o banco de dados existe")
     # Defina as informações de conexão
     config = {
+        #'host': '172.19.0.2',
         'host': 'localhost',
         'user': 'root',
-        'password': 'ehcQ8jpfjrGST93n'
+        'password': 'ehcQ8jpfjrGST93n',
+        'charset': "utf8mb4"
     }
 
     # Crie a conexão
@@ -106,11 +120,11 @@ def verificarDB():
                             id INT AUTO_INCREMENT PRIMARY KEY,
                             id_json INT,
                             user_name VARCHAR(255),
-                            credit_card_num VARCHAR(255),
-                            credit_card_ccv CHAR(255),
+                            credit_card_num TEXT,
+                            credit_card_ccv TEXT,
                             cuenta_numero VARCHAR(20),
                             codigo_zip CHAR(10),
-                            fec_alta DATETIME, 
+                            fec_alta VARCHAR(30), 
                             direccion VARCHAR(255),
                             geo_latitud VARCHAR(20),
                             geo_longitud VARCHAR(20),
@@ -123,7 +137,7 @@ def verificarDB():
                             auto_color VARCHAR(255),
                             cantidad_compras_realizadas INT,
                             avatar VARCHAR(255),
-                            fec_birthday DATETIME
+                            fec_birthday VARCHAR(30)
                             )""")
         conn.commit()
 
@@ -143,10 +157,12 @@ def getJson():
 
         # Conecte-se ao banco de dados
         conn = mysql.connector.connect(
+            #host="172.19.0.2",
             host="localhost",
-            user="seu_usuario",
-            password="sua_senha",
-            database="mlchallenge_db"  # Substitua pelo nome do seu banco de dados
+            user="root",
+            password="ehcQ8jpfjrGST93n",
+            database="mlchallenge_db",
+            charset="utf8mb4"
         )
 
         # Crie um cursor para executar as consultas SQL
@@ -158,8 +174,8 @@ def getJson():
             dados = {
                 "id_json": item["id"],
                 "user_name": item["user_name"],
-                "credit_card_num": criptografar(item["credit_card_num"]),
-                "credit_card_ccv": criptografar(item["credit_card_ccv"]),
+                "credit_card_num": str(criptografar(item["credit_card_num"])),
+                "credit_card_ccv": str(criptografar(item["credit_card_ccv"])),
                 "cuenta_numero": item["cuenta_numero"],
                 "codigo_zip": item["codigo_zip"],
                 "fec_alta": item["fec_alta"],
@@ -198,22 +214,19 @@ def getJson():
             # Faça o commit da transação
             conn.commit()
 
-            # Feche o cursor e a conexão com o banco de dados
-            cursor.close()
-            conn.close()
-
-        # Agora você pode usar o JSON conforme necessário
-        print(json_data)
+        # Feche o cursor e a conexão com o banco de dados
+        cursor.close()
+        conn.close()
     else:
         print("Erro ao obter o JSON da URL:", response.status_code)
-
-
 
 
 
 #Função para verificar e criar banco de dados
 verificarDB()
 
+# Verificar se o par de chaves já existe, caso não exista, gerar um novo par de chaves
+verificaPardeChaves()
+
 #Função para pegar dados do JSON e inserir no banco de dados
 getJson()
-
